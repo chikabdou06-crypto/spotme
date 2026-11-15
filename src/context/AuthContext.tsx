@@ -7,13 +7,17 @@ import { DEFAULT_CURRENT_USER } from "@/data/mockData";
 
 interface AuthContextType {
   user: UserProfile;
+  userCoords: { lat: number; lng: number; label: string };
+  requestLocation: () => void;
   isAuthenticated: boolean;
   isOnboarded: boolean;
   isLoading: boolean;
   isSupabaseLive: boolean;
   showOnboardingModal: boolean;
   setShowOnboardingModal: (show: boolean) => void;
-  signInWithMagicLink: (email: string) => Promise<{ ok: boolean; message: string }>;
+  signInWithMagicLink: (
+    email: string
+  ) => Promise<{ ok: boolean; message: string }>;
   signInWithSocial: (provider: "google" | "apple") => Promise<void>;
   completeOnboarding: (profileData: {
     display_name: string;
@@ -22,23 +26,50 @@ interface AuthContextType {
     home_gym_id: string;
     favorite_split: string;
   }) => Promise<void>;
+  resetOnboarding: () => void;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const STORAGE_KEY = "spotme_user_profile_v1";
-const ONBOARDED_KEY = "spotme_onboarded_v1";
+const STORAGE_KEY = "spotme_user_profile_alicante_v2";
+const ONBOARDED_KEY = "spotme_onboarded_alicante_v2";
+
+// Default coordinates: Alicante, Spain (Centro / Maisonnave)
+const ALICANTE_DEFAULT = {
+  lat: 38.3452,
+  lng: -0.481,
+  label: "Alicante, Spain",
+};
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile>(DEFAULT_CURRENT_USER);
+  const [userCoords, setUserCoords] = useState(ALICANTE_DEFAULT);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
-  const [isOnboarded, setIsOnboarded] = useState<boolean>(true);
+  const [isOnboarded, setIsOnboarded] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [showOnboardingModal, setShowOnboardingModal] = useState<boolean>(false);
+  const [showOnboardingModal, setShowOnboardingModal] =
+    useState<boolean>(false);
+
+  const requestLocation = () => {
+    if (typeof navigator !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUserCoords({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            label: "Alicante (GPS Active)",
+          });
+        },
+        () => {
+          setUserCoords(ALICANTE_DEFAULT);
+        },
+        { enableHighAccuracy: true, timeout: 6000 }
+      );
+    }
+  };
 
   useEffect(() => {
-    // Load local profile if saved
     try {
       const savedProfile = localStorage.getItem(STORAGE_KEY);
       const savedOnboarded = localStorage.getItem(ONBOARDED_KEY);
@@ -52,50 +83,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // ignore storage errors
     }
 
-    if (!isSupabaseConfigured || !supabase) {
-      setIsLoading(false);
-      return;
-    }
-
-    // Check active Supabase session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        setIsAuthenticated(true);
-        const { data: profile } = await supabase!
-          .from("users")
-          .select("*")
-          .eq("id", session.user.id)
-          .single();
-
-        if (profile) {
-          setUser(profile as UserProfile);
-          setIsOnboarded(true);
-        }
-      }
-      setIsLoading(false);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        setIsAuthenticated(true);
-        const { data: profile } = await supabase!
-          .from("users")
-          .select("*")
-          .eq("id", session.user.id)
-          .single();
-
-        if (profile) {
-          setUser(profile as UserProfile);
-          setIsOnboarded(true);
-        }
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    requestLocation();
+    setIsLoading(false);
   }, []);
 
   const signInWithMagicLink = async (
@@ -114,15 +103,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       return {
         ok: true,
-        message: "Magic link sent! Check your inbox to jump into the radar.",
+        message: "Magic link sent! Check your inbox.",
       };
     }
 
-    // Demo Mode instant magic link simulation
     setIsAuthenticated(true);
     return {
       ok: true,
-      message: `Instant Magic Link verified for ${email}! Set up your gym profile below.`,
+      message: `Signed in with ${email}`,
     };
   };
 
@@ -150,13 +138,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const cleanUsername = profileData.username
       .trim()
       .toLowerCase()
-      .replace(/[^a-z0-9_]/g, "_");
+      .replace(/[^a-z0-9_.]/g, "_");
 
     const updatedUser: UserProfile = {
       ...user,
-      display_name: profileData.display_name.trim() || "Gym Bro",
-      username: cleanUsername || "spotme_athlete",
-      avatar_url: profileData.avatar_url || "🦍",
+      display_name: profileData.display_name.trim() || "Alex",
+      username: cleanUsername || "alex_alicante",
+      avatar_url: profileData.avatar_url || DEFAULT_CURRENT_USER.avatar_url,
       home_gym_id: profileData.home_gym_id,
       favorite_split: profileData.favorite_split,
     };
@@ -185,17 +173,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const resetOnboarding = () => {
+    setIsOnboarded(false);
+    try {
+      localStorage.removeItem(ONBOARDED_KEY);
+    } catch {
+      // ignore
+    }
+  };
+
   const signOut = async () => {
     if (isSupabaseConfigured && supabase) {
       await supabase.auth.signOut();
     }
-    setShowOnboardingModal(true);
+    resetOnboarding();
   };
 
   return (
     <AuthContext.Provider
       value={{
         user,
+        userCoords,
+        requestLocation,
         isAuthenticated,
         isOnboarded,
         isLoading,
@@ -205,6 +204,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signInWithMagicLink,
         signInWithSocial,
         completeOnboarding,
+        resetOnboarding,
         signOut,
       }}
     >
