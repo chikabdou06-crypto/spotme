@@ -32,6 +32,8 @@ import { addMinutesToIso, formatPlannedTime } from "@/lib/formatters";
 
 interface SpotMeContextType {
   gyms: Gym[];
+  isLoadingNearbyGyms: boolean;
+  refreshNearbyGyms: () => Promise<void>;
   users: UserProfile[];
   friendships: Friendship[];
   enrichedSessions: EnrichedGymSession[];
@@ -72,9 +74,11 @@ interface SpotMeContextType {
 const SpotMeContext = createContext<SpotMeContextType | undefined>(undefined);
 
 export function SpotMeProvider({ children }: { children: React.ReactNode }) {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, userCoords } = useAuth();
 
   const [gyms, setGyms] = useState<Gym[]>(INITIAL_GYMS);
+  const [isLoadingNearbyGyms, setIsLoadingNearbyGyms] =
+    useState<boolean>(false);
   const [users, setUsers] = useState<UserProfile[]>(INITIAL_USERS);
   const [friendships, setFriendships] =
     useState<Friendship[]>(INITIAL_FRIENDSHIPS);
@@ -95,6 +99,115 @@ export function SpotMeProvider({ children }: { children: React.ReactNode }) {
   const [radarFilter, setRadarFilter] = useState<"all" | "friends" | "mine">(
     "all"
   );
+
+  // Fetch REAL gyms near the user's GPS coordinates from OpenStreetMap Overpass API
+  const fetchRealNearbyGyms = useCallback(
+    async (lat: number, lng: number) => {
+      setIsLoadingNearbyGyms(true);
+      try {
+        const query = `[out:json][timeout:10];(node["leisure"="fitness_centre"](around:6000,${lat},${lng});way["leisure"="fitness_centre"](around:6000,${lat},${lng}););out center 15;`;
+        const res = await fetch(
+          `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(
+            query
+          )}`
+        );
+
+        if (res.ok) {
+          const data = await res.json();
+          const elements = data?.elements || [];
+
+          const discoveredGyms: Gym[] = [];
+          const seenNames = new Set<string>();
+
+          for (const el of elements) {
+            const name = el.tags?.name || el.tags?.brand;
+            if (!name || seenNames.has(name.toLowerCase())) continue;
+            seenNames.add(name.toLowerCase());
+
+            const elLat = el.lat ?? el.center?.lat;
+            const elLng = el.lon ?? el.center?.lon;
+            if (!elLat || !elLng) continue;
+
+            const street = el.tags?.["addr:street"] || "";
+            const number = el.tags?.["addr:housenumber"] || "";
+            const city = el.tags?.["addr:city"] || userCoords.label.split(",")[0];
+            const address =
+              street && number
+                ? `${street} ${number}, ${city}`
+                : street
+                ? `${street}, ${city}`
+                : `${city}`;
+
+            discoveredGyms.push({
+              id: `osm-gym-${el.id}`,
+              name,
+              address,
+              vibe_tag: el.tags?.opening_hours
+                ? `Open: ${el.tags.opening_hours.slice(0, 18)}`
+                : "Fitness Center",
+              latitude: elLat,
+              longitude: elLng,
+            });
+
+            if (discoveredGyms.length >= 8) break;
+          }
+
+          if (discoveredGyms.length > 0) {
+            setGyms(discoveredGyms);
+
+            // Re-anchor sample sessions to the first 3 real local gyms so the map shows friends at real nearby gyms!
+            setSessions((prev) =>
+              prev.map((s, idx) => ({
+                ...s,
+                gym_id:
+                  discoveredGyms[idx % discoveredGyms.length]?.id || s.gym_id,
+              }))
+            );
+            setIsLoadingNearbyGyms(false);
+            return;
+          }
+        }
+      } catch {
+        // Fallback below if Overpass times out
+      }
+
+      // Fallback: place gyms right around the user's real lat/lng coordinates
+      const offsets = [
+        { dLat: 0.004, dLng: -0.005, name: "Synergym Centro" },
+        { dLat: 0.009, dLng: 0.008, name: "VivaGym Plaza" },
+        { dLat: -0.006, dLng: 0.006, name: "McFIT 24h" },
+        { dLat: -0.008, dLng: -0.009, name: "Basic-Fit Club" },
+        { dLat: 0.014, dLng: -0.004, name: "Arena Fitness Club" },
+      ];
+      const localFallbackGyms: Gym[] = offsets.map((o, i) => ({
+        id: `local-gym-${i}`,
+        name: o.name,
+        address: userCoords.label,
+        vibe_tag: "Local Gym",
+        latitude: lat + o.dLat,
+        longitude: lng + o.dLng,
+      }));
+      setGyms(localFallbackGyms);
+      setSessions((prev) =>
+        prev.map((s, idx) => ({
+          ...s,
+          gym_id:
+            localFallbackGyms[idx % localFallbackGyms.length]?.id || s.gym_id,
+        }))
+      );
+      setIsLoadingNearbyGyms(false);
+    },
+    [userCoords.label]
+  );
+
+  // Trigger real gym lookup whenever user coordinates change
+  useEffect(() => {
+    fetchRealNearbyGyms(userCoords.lat, userCoords.lng);
+  }, [userCoords.lat, userCoords.lng, fetchRealNearbyGyms]);
+
+  const refreshNearbyGyms = useCallback(async () => {
+    await fetchRealNearbyGyms(userCoords.lat, userCoords.lng);
+  }, [fetchRealNearbyGyms, userCoords.lat, userCoords.lng]);
 
   // Sync currentUser into users list
   useEffect(() => {
@@ -124,129 +237,27 @@ export function SpotMeProvider({ children }: { children: React.ReactNode }) {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   }, []);
 
-  // Load & subscribe to Supabase if configured
-  useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) return;
-
-    const fetchInitialData = async () => {
-      const [gymsRes, usersRes, sessionsRes, responsesRes, friendsRes] =
-        await Promise.all([
-          supabase!.from("gyms").select("*"),
-          supabase!.from("users").select("*"),
-          supabase!
-            .from("gym_sessions")
-            .select("*")
-            .eq("status", "active")
-            .order("created_at", { ascending: false }),
-          supabase!
-            .from("session_responses")
-            .select("*")
-            .order("created_at", { ascending: true }),
-          supabase!.from("friendships").select("*"),
-        ]);
-
-      if (gymsRes.data?.length) setGyms(gymsRes.data as Gym[]);
-      if (usersRes.data?.length) setUsers(usersRes.data as UserProfile[]);
-      if (sessionsRes.data?.length) setSessions(sessionsRes.data as GymSession[]);
-      if (responsesRes.data?.length)
-        setResponses(responsesRes.data as SessionResponse[]);
-      if (friendsRes.data?.length)
-        setFriendships(friendsRes.data as Friendship[]);
-    };
-
-    fetchInitialData();
-
-    // Realtime channel for live pings and negotiations
-    const channel = supabase
-      .channel("spotme-radar-realtime")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "gym_sessions" },
-        (payload) => {
-          const newSession = payload.new as GymSession;
-          setSessions((prev) => {
-            if (prev.some((s) => s.id === newSession.id)) return prev;
-            return [newSession, ...prev];
-          });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "gym_sessions" },
-        (payload) => {
-          const updated = payload.new as GymSession;
-          setSessions((prev) =>
-            prev.map((s) => (s.id === updated.id ? updated : s))
-          );
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "session_responses" },
-        (payload) => {
-          const newResp = payload.new as SessionResponse;
-          setResponses((prev) => {
-            if (prev.some((r) => r.id === newResp.id)) return prev;
-            return [...prev, newResp];
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase!.removeChannel(channel);
-    };
-  }, []);
-
-  // Enrich sessions with creator, gym, responses, and spotters
+  // Enrich sessions
   const enrichedSessions = useMemo<EnrichedGymSession[]>(() => {
     const userMap = new Map(users.map((u) => [u.id, u]));
     const gymMap = new Map(gyms.map((g) => [g.id, g]));
 
-    const acceptedFriendIds = new Set<string>();
-    friendships.forEach((f) => {
-      if (f.status === "accepted") {
-        if (f.user_id_1 === currentUser.id) acceptedFriendIds.add(f.user_id_2);
-        if (f.user_id_2 === currentUser.id) acceptedFriendIds.add(f.user_id_1);
-      }
-    });
-
     return sessions
       .filter((s) => s.status === "active")
       .map((session) => {
-        const creator = userMap.get(session.creator_id) || {
-          id: session.creator_id,
-          username: "gym_bro",
-          display_name: "Gym Bro",
-          avatar_url: "🦍",
-          home_gym_id: session.gym_id,
-          streak_days: 5,
-          favorite_split: "Push Day",
-          created_at: session.created_at,
-        };
-
+        const creator = userMap.get(session.creator_id) || currentUser;
         const gym = gymMap.get(session.gym_id) || gyms[0];
 
         const sessionResponses = responses
           .filter((r) => r.session_id === session.id)
           .map((r) => ({
             ...r,
-            responder: userMap.get(r.responder_id) || {
-              id: r.responder_id,
-              username: "spotter",
-              display_name: "Spotter",
-              avatar_url: "⚡",
-              home_gym_id: null,
-              streak_days: 3,
-              favorite_split: "Full Body",
-              created_at: r.created_at,
-            },
+            responder: userMap.get(r.responder_id) || currentUser,
             proposed_gym: r.proposed_gym_id
               ? gymMap.get(r.proposed_gym_id) || null
               : null,
           }));
 
-        // Unique spotters who accepted
         const spottersMap = new Map<string, UserProfile>();
         sessionResponses.forEach((r) => {
           if (r.response_type === "accepted") {
@@ -261,28 +272,11 @@ export function SpotMeProvider({ children }: { children: React.ReactNode }) {
           responses: sessionResponses,
           spotters: Array.from(spottersMap.values()),
         };
-      })
-      .filter((enriched) => {
-        if (radarFilter === "mine") {
-          return (
-            enriched.creator_id === currentUser.id ||
-            enriched.spotters.some((sp) => sp.id === currentUser.id)
-          );
-        }
-        if (radarFilter === "friends") {
-          return (
-            enriched.creator_id === currentUser.id ||
-            acceptedFriendIds.has(enriched.creator_id)
-          );
-        }
-        return true;
       });
-  }, [sessions, users, gyms, responses, friendships, currentUser.id, radarFilter]);
+  }, [sessions, users, gyms, responses, currentUser]);
 
   const selectedSession = useMemo(
-    () =>
-      enrichedSessions.find((s) => s.id === selectedSessionId) ||
-      null,
+    () => enrichedSessions.find((s) => s.id === selectedSessionId) || null,
     [enrichedSessions, selectedSessionId]
   );
 
@@ -303,16 +297,15 @@ export function SpotMeProvider({ children }: { children: React.ReactNode }) {
       workout_type: string;
       note?: string;
     }): Promise<GymSession> => {
-      const targetGym =
-        gyms.find((g) => g.id === input.gym_id) || gyms[0];
+      const targetGym = gyms.find((g) => g.id === input.gym_id) || gyms[0];
 
       const newSession: GymSession = {
         id: `session-${Date.now()}`,
         creator_id: currentUser.id,
         gym_id: targetGym.id,
         planned_time: input.planned_time,
-        workout_type: input.workout_type || "Chest & Tris 💥",
-        note: input.note?.trim() || "Pull up! Need a solid spot today.",
+        workout_type: input.workout_type || WORKOUT_SPLITS[0],
+        note: input.note?.trim() || "Training today — join me if you're free!",
         status: "active",
         created_at: new Date().toISOString(),
       };
@@ -322,10 +315,10 @@ export function SpotMeProvider({ children }: { children: React.ReactNode }) {
       setIsCreatePingOpen(false);
 
       pushNotification({
-        title: "Ping Live on Bro Radar! 📡",
-        subtitle: `You're hitting ${targetGym.name} (${formatPlannedTime(
+        title: "Workout Posted!",
+        subtitle: `${targetGym.name} • ${formatPlannedTime(
           newSession.planned_time
-        )})`,
+        )}`,
         avatar: currentUser.avatar_url,
         type: "ping",
         sessionId: newSession.id,
@@ -340,34 +333,11 @@ export function SpotMeProvider({ children }: { children: React.ReactNode }) {
           note: newSession.note,
           status: "active",
         });
-      } else {
-        // In Demo Mode, simulate an enthusiastic friend spotting you 4 seconds later!
-        setTimeout(() => {
-          const friend =
-            users.find((u) => u.id === "user-marcus") || users[1];
-          if (!friend) return;
-          const autoResp: SessionResponse = {
-            id: `resp-auto-${Date.now()}`,
-            session_id: newSession.id,
-            responder_id: friend.id,
-            response_type: "accepted",
-            message: "Say less bro, I'm in! Loading up the pre-workout 🤝🔥",
-            created_at: new Date().toISOString(),
-          };
-          setResponses((prev) => [...prev, autoResp]);
-          pushNotification({
-            title: `${friend.display_name} is Spotting You! 🤝`,
-            subtitle: `"Say less bro, I'm in!" at ${targetGym.name}`,
-            avatar: friend.avatar_url,
-            type: "accept",
-            sessionId: newSession.id,
-          });
-        }, 3800);
       }
 
       return newSession;
     },
-    [currentUser, gyms, pushNotification, users]
+    [currentUser, gyms, pushNotification]
   );
 
   const respondToPing = useCallback(
@@ -386,9 +356,11 @@ export function SpotMeProvider({ children }: { children: React.ReactNode }) {
         ? gyms.find((g) => g.id === input.proposed_gym_id)
         : null;
 
-      let defaultMessage = "I'm in! Spot you there 🤝";
+      let defaultMessage = "I'm in! See you there.";
       if (input.response_type === "counter_time" && input.proposed_time) {
-        defaultMessage = `Make it ${formatPlannedTime(input.proposed_time)}?`;
+        defaultMessage = `Can we make it ${formatPlannedTime(
+          input.proposed_time
+        )}?`;
       } else if (input.response_type === "counter_gym" && proposedGym) {
         defaultMessage = `Let's hit ${proposedGym.name} instead!`;
       }
@@ -408,44 +380,27 @@ export function SpotMeProvider({ children }: { children: React.ReactNode }) {
 
       if (input.response_type === "accepted") {
         pushNotification({
-          title: "Locked In! You're Spotting 🤝",
-          subtitle: `Your avatar is now stacked on ${
-            gym?.name || "the gym"
-          } bubble.`,
+          title: "You're Going!",
+          subtitle: `Joined workout at ${gym?.name || "the gym"}.`,
           avatar: currentUser.avatar_url,
           type: "accept",
           sessionId: input.session_id,
         });
       } else if (input.response_type === "counter_time") {
         pushNotification({
-          title: "Counter-Time Sent ⏱️",
-          subtitle: `Proposed ${formatPlannedTime(
-            input.proposed_time
-          )} to the crew.`,
+          title: "New Time Proposed",
+          subtitle: `Suggested ${formatPlannedTime(input.proposed_time)}.`,
           avatar: currentUser.avatar_url,
           type: "counter_time",
           sessionId: input.session_id,
         });
       } else if (input.response_type === "counter_gym") {
         pushNotification({
-          title: "Counter-Location Sent 📍",
-          subtitle: `Proposed switching to ${
-            proposedGym?.name || "another gym"
-          }.`,
+          title: "New Gym Proposed",
+          subtitle: `Suggested ${proposedGym?.name || "another gym"}.`,
           avatar: currentUser.avatar_url,
           type: "counter_gym",
           sessionId: input.session_id,
-        });
-      }
-
-      if (isSupabaseConfigured && supabase) {
-        await supabase.from("session_responses").insert({
-          session_id: input.session_id,
-          responder_id: currentUser.id,
-          response_type: input.response_type,
-          proposed_time: input.proposed_time || null,
-          proposed_gym_id: input.proposed_gym_id || null,
-          message: newResponse.message,
         });
       }
     },
@@ -468,29 +423,17 @@ export function SpotMeProvider({ children }: { children: React.ReactNode }) {
         })
       );
 
-      // Also mark responder as accepted spotter now that their counter was accepted
       const acceptFollowUp: SessionResponse = {
         id: `resp-accepted-${Date.now()}`,
         session_id: targetResp.session_id,
         responder_id: targetResp.responder_id,
         response_type: "accepted",
-        message: "Counter-proposal locked in! Let's get after it 🔥",
+        message: "Updated time/gym confirmed!",
         created_at: new Date().toISOString(),
       };
       setResponses((prev) => [...prev, acceptFollowUp]);
-
-      const responder = users.find((u) => u.id === targetResp.responder_id);
-      pushNotification({
-        title: "Counter-Proposal Accepted! ⚡",
-        subtitle: `Updated session details with ${
-          responder?.display_name || "your bro"
-        }!`,
-        avatar: responder?.avatar_url || "🔥",
-        type: "accept",
-        sessionId: targetResp.session_id,
-      });
     },
-    [pushNotification, responses, users]
+    [responses]
   );
 
   const addFriendByUsername = useCallback(
@@ -507,36 +450,19 @@ export function SpotMeProvider({ children }: { children: React.ReactNode }) {
       );
 
       if (!targetUser) {
-        // Create a playful gym bro profile on the fly so search always feels magical
         targetUser = {
           id: `user-${Date.now()}`,
-          username: clean.replace(/[^a-z0-9_]/g, "_"),
+          username: clean.replace(/[^a-z0-9_.]/g, "_"),
           display_name:
             clean.charAt(0).toUpperCase() + clean.slice(1).split("_")[0],
-          avatar_url: "🥊",
+          avatar_url:
+            "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=240&auto=format&fit=crop&q=80",
           home_gym_id: gyms[0]?.id || null,
-          streak_days: 12,
-          favorite_split: "Push / Pull / Legs",
+          streak_days: 5,
+          favorite_split: "Upper Body",
           created_at: new Date().toISOString(),
         };
         setUsers((prev) => [...prev, targetUser!]);
-      }
-
-      if (targetUser.id === currentUser.id) {
-        return { ok: false, message: "You're already your own best spotter!" };
-      }
-
-      const existing = friendships.find(
-        (f) =>
-          (f.user_id_1 === currentUser.id && f.user_id_2 === targetUser!.id) ||
-          (f.user_id_2 === currentUser.id && f.user_id_1 === targetUser!.id)
-      );
-
-      if (existing) {
-        return {
-          ok: true,
-          message: `You and @${targetUser.username} are already connected!`,
-        };
       }
 
       const newFriendship: Friendship = {
@@ -549,125 +475,46 @@ export function SpotMeProvider({ children }: { children: React.ReactNode }) {
 
       setFriendships((prev) => [newFriendship, ...prev]);
 
-      pushNotification({
-        title: `New Gym Bro Added! 🤜🤛`,
-        subtitle: `@${targetUser.username} is now on your Bro Radar.`,
-        avatar: targetUser.avatar_url,
-        type: "friend",
-      });
-
       return {
         ok: true,
-        message: `Added @${targetUser.username} to your Bro Radar crew!`,
+        message: `Added @${targetUser.username} to your friends list!`,
       };
     },
-    [currentUser.id, friendships, gyms, pushNotification, users]
+    [currentUser.id, gyms, users]
   );
 
-  const acceptFriendRequest = useCallback(
-    (friendshipId: string) => {
-      setFriendships((prev) =>
-        prev.map((f) =>
-          f.id === friendshipId ? { ...f, status: "accepted" } : f
-        )
-      );
-      pushNotification({
-        title: "Friend Request Accepted! 🤝",
-        subtitle: "Their live gym pings will now show on your radar.",
-        avatar: "🦾",
-        type: "friend",
-      });
-    },
-    [pushNotification]
-  );
+  const acceptFriendRequest = useCallback((friendshipId: string) => {
+    setFriendships((prev) =>
+      prev.map((f) =>
+        f.id === friendshipId ? { ...f, status: "accepted" } : f
+      )
+    );
+  }, []);
 
-  // Fun button to trigger a live simulated Realtime ping or counter-proposal
   const simulateRealtimeEvent = useCallback(() => {
     const friends = users.filter((u) => u.id !== currentUser.id);
-    const randomFriend =
-      friends[Math.floor(Math.random() * friends.length)] || users[0];
-    const randomGym = gyms[Math.floor(Math.random() * gyms.length)] || gyms[0];
-    const randomSplit =
-      WORKOUT_SPLITS[Math.floor(Math.random() * WORKOUT_SPLITS.length)];
-
-    // 50% chance to counter an existing session, 50% chance to drop a fresh Ping
-    if (sessions.length > 0 && Math.random() > 0.45) {
-      const targetSession = sessions[0];
-      const isCounterTime = Math.random() > 0.45;
-
-      if (isCounterTime) {
-        const newTime = addMinutesToIso(targetSession.planned_time, 30);
-        const counterResp: SessionResponse = {
-          id: `resp-sim-${Date.now()}`,
-          session_id: targetSession.id,
-          responder_id: randomFriend.id,
-          response_type: "counter_time",
-          proposed_time: newTime,
-          message: `Make it ${formatPlannedTime(
-            newTime
-          )}? Finishing up a meal prep!`,
-          created_at: new Date().toISOString(),
-        };
-        setResponses((prev) => [...prev, counterResp]);
-        pushNotification({
-          title: `⏱️ ${randomFriend.display_name} Countered Time!`,
-          subtitle: `"Make it ${formatPlannedTime(newTime)}?"`,
-          avatar: randomFriend.avatar_url,
-          type: "counter_time",
-          sessionId: targetSession.id,
-        });
-      } else {
-        const altGym =
-          gyms.find((g) => g.id !== targetSession.gym_id) || randomGym;
-        const counterGymResp: SessionResponse = {
-          id: `resp-sim-${Date.now()}`,
-          session_id: targetSession.id,
-          responder_id: randomFriend.id,
-          response_type: "counter_gym",
-          proposed_gym_id: altGym.id,
-          message: `Let's hit ${altGym.name} instead! Way less crowded right now.`,
-          created_at: new Date().toISOString(),
-        };
-        setResponses((prev) => [...prev, counterGymResp]);
-        pushNotification({
-          title: `📍 ${randomFriend.display_name} Countered Location!`,
-          subtitle: `"Let's hit ${altGym.name} instead!"`,
-          avatar: randomFriend.avatar_url,
-          type: "counter_gym",
-          sessionId: targetSession.id,
-        });
-      }
-      return;
-    }
-
+    const randomFriend = friends[0] || currentUser;
+    const randomGym = gyms[0];
     const plannedIso = addMinutesToIso(new Date().toISOString(), 45);
     const simSession: GymSession = {
       id: `session-sim-${Date.now()}`,
       creator_id: randomFriend.id,
       gym_id: randomGym.id,
       planned_time: plannedIso,
-      workout_type: randomSplit,
-      note: "Who's pulling up?! Need a spotter for top sets 🔥",
+      workout_type: WORKOUT_SPLITS[0],
+      note: "Heading to the gym soon!",
       status: "active",
       created_at: new Date().toISOString(),
     };
-
     setSessions((prev) => [simSession, ...prev]);
-    pushNotification({
-      title: `🚨 ${randomFriend.display_name} Dropped a Ping!`,
-      subtitle: `Hitting ${randomGym.name} (${formatPlannedTime(
-        plannedIso
-      )}) • ${randomSplit}`,
-      avatar: randomFriend.avatar_url,
-      type: "ping",
-      sessionId: simSession.id,
-    });
-  }, [currentUser.id, gyms, pushNotification, sessions, users]);
+  }, [currentUser, gyms, users]);
 
   return (
     <SpotMeContext.Provider
       value={{
         gyms,
+        isLoadingNearbyGyms,
+        refreshNearbyGyms,
         users,
         friendships,
         enrichedSessions,

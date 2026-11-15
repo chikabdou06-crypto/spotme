@@ -132,7 +132,7 @@ export function WelcomeOnboardingView() {
   };
 
   return (
-    <div className="relative w-full h-full bg-obsidian-950 text-white flex flex-col justify-between overflow-y-auto px-6 py-10">
+    <div className="relative w-full h-full bg-obsidian-950 text-white flex flex-col justify-between overflow-y-auto px-6 pt-[max(env(safe-area-inset-top,58px),58px)] pb-[max(env(safe-area-inset-bottom,32px),32px)]">
       {/* ====================================================================
           STEP 1: "Welcome to SpotMe." -> "Thank You"
          ==================================================================== */}

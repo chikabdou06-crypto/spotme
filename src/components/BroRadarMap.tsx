@@ -1,45 +1,52 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { useSpotMe } from "@/context/SpotMeContext";
 import { useAuth } from "@/context/AuthContext";
-import { EnrichedGymSession, Gym } from "@/types/spotme";
+import { EnrichedGymSession } from "@/types/spotme";
 import { UserAvatar } from "@/components/UserAvatar";
 import { formatShortTime } from "@/lib/formatters";
 import {
   Compass,
+  Dumbbell,
+  MapPin,
   Minus,
   Navigation,
   Plus,
+  RefreshCw,
+  Sun,
 } from "lucide-react";
 
-// Map coordinates for Alicante, Spain gyms (in % on the Alicante coastal map)
-const ALICANTE_GYM_POSITIONS: Record<string, { x: number; y: number }> = {
-  "gym-synergym-centro": { x: 44, y: 58 }, // Av. Maisonnave (Centro)
-  "gym-vivagym-plazamar": { x: 58, y: 48 }, // Plaza Mar 2 / Av. de Denia
-  "gym-mcfit-alicante": { x: 65, y: 38 }, // Av. de Denia North
-  "gym-basicfit-babel": { x: 28, y: 68 }, // Babel
-  "gym-arena-alicante": { x: 80, y: 24 }, // Playa de San Juan
-  "gym-dreamfit-sanvicente": { x: 30, y: 22 }, // San Vicente del Raspeig
-};
+const DARK_STYLE =
+  "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
+const LIGHT_STYLE =
+  "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json";
 
 export function BroRadarMap() {
   const {
     gyms,
+    isLoadingNearbyGyms,
+    refreshNearbyGyms,
     enrichedSessions,
     selectedSessionId,
     setSelectedSessionId,
     openCreatePing,
   } = useSpotMe();
-  const { user: currentUser, userCoords, requestLocation } = useAuth();
+  const { userCoords, requestLocation } = useAuth();
 
-  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState<number>(1);
-  const [isDragging, setIsDragging] = useState<boolean>(false);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number }>({
-    x: 0,
-    y: 0,
-  });
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const [mapStyle, setMapStyle] = useState<"dark" | "light">("dark");
+  const [projectedGyms, setProjectedGyms] = useState<
+    Record<string, { x: number; y: number }>
+  >({});
+  const [projectedUser, setProjectedUser] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
 
   const sessionsByGym = useMemo(() => {
     const map = new Map<string, EnrichedGymSession[]>();
@@ -51,224 +58,214 @@ export function BroRadarMap() {
     return map;
   }, [enrichedSessions]);
 
-  const getGymCoords = (gym: Gym, idx: number) => {
-    if (ALICANTE_GYM_POSITIONS[gym.id]) return ALICANTE_GYM_POSITIONS[gym.id];
-    return { x: 35 + idx * 10, y: 40 + (idx % 3) * 12 };
+  const updateProjections = () => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const uPoint = map.project([userCoords.lng, userCoords.lat]);
+    setProjectedUser({ x: uPoint.x, y: uPoint.y });
+
+    const nextGymPoints: Record<string, { x: number; y: number }> = {};
+    gyms.forEach((g) => {
+      const pt = map.project([g.longitude, g.latitude]);
+      nextGymPoints[g.id] = { x: pt.x, y: pt.y };
+    });
+    setProjectedGyms(nextGymPoints);
   };
 
-  const handleRecenter = () => {
-    requestLocation();
-    setPan({ x: 0, y: 0 });
-    setZoom(1);
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
+
+    const map = new maplibregl.Map({
+      container: mapContainerRef.current,
+      style: DARK_STYLE,
+      center: [userCoords.lng, userCoords.lat],
+      zoom: 13.8,
+      attributionControl: false,
+    });
+
+    mapRef.current = map;
+
+    map.on("load", updateProjections);
+    map.on("move", updateProjections);
+    map.on("zoom", updateProjections);
+    map.on("resize", updateProjections);
+
+    setTimeout(updateProjections, 80);
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Re-center map when userCoords changes
+  useEffect(() => {
+    if (mapRef.current) {
+      mapRef.current.flyTo({
+        center: [userCoords.lng, userCoords.lat],
+        zoom: 13.8,
+        duration: 850,
+      });
+    }
+    updateProjections();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userCoords.lat, userCoords.lng]);
+
+  // Re-project when discovered gyms change
+  useEffect(() => {
+    updateProjections();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gyms]);
+
+  const handleToggleMapStyle = () => {
+    const next = mapStyle === "dark" ? "light" : "dark";
+    setMapStyle(next);
+    if (mapRef.current) {
+      mapRef.current.setStyle(next === "dark" ? DARK_STYLE : LIGHT_STYLE);
+    }
   };
 
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest("button")) return;
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+  const handleLocateMe = async () => {
+    setIsLocating(true);
+    const coords = await requestLocation();
+    if (mapRef.current) {
+      mapRef.current.flyTo({
+        center: [coords.lng, coords.lat],
+        zoom: 14.2,
+        duration: 800,
+      });
+    }
+    await refreshNearbyGyms();
+    setIsLocating(false);
   };
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDragging) return;
-    const nextX = Math.max(-150, Math.min(150, e.clientX - dragStart.x));
-    const nextY = Math.max(-150, Math.min(150, e.clientY - dragStart.y));
-    setPan({ x: nextX, y: nextY });
-  };
-
-  const handlePointerUp = () => {
-    setIsDragging(false);
+  const handleFocusGym = (lng: number, lat: number) => {
+    if (mapRef.current) {
+      mapRef.current.easeTo({
+        center: [lng, lat],
+        zoom: Math.max(mapRef.current.getZoom(), 14.5),
+        duration: 500,
+      });
+    }
   };
 
   return (
-    <div
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
-      className={`relative w-full h-full overflow-hidden bg-[#080C14] select-none ${
-        isDragging ? "cursor-grabbing" : "cursor-grab"
-      }`}
-    >
-      {/* Clean Top Header Bar on Map */}
-      <div className="absolute top-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
-        <div className="pointer-events-auto px-3.5 py-2 rounded-2xl bg-obsidian-900/90 backdrop-blur-md border border-white/10 shadow-xl">
-          <div className="text-xs font-black text-white">
-            📍 {userCoords.label}
-          </div>
-          <div className="text-[10px] text-slate-400">
-            Tap a friend to join or tap a gym to plan
+    <div className="relative w-full h-full overflow-hidden bg-obsidian-950 select-none">
+      {/* 1. Real Interactive Street Map (MapLibre GL) */}
+      <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />
+
+      {/* 2. Top Safe-Area Header (Clears iPhone 14 Pro Max Dynamic Island!) */}
+      <div className="pointer-events-none absolute top-0 left-0 right-0 z-20 px-4 pt-[max(env(safe-area-inset-top,56px),56px)] pb-2 flex items-center justify-between gap-2 bg-gradient-to-b from-obsidian-950/90 via-obsidian-950/40 to-transparent">
+        <div className="pointer-events-auto flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-obsidian-900/95 backdrop-blur-xl border border-white/15 shadow-xl">
+          <div className="w-2.5 h-2.5 rounded-full bg-volt animate-pulse" />
+          <div>
+            <div className="text-xs font-black text-white leading-tight">
+              {userCoords.label}
+            </div>
+            <div className="text-[10px] text-slate-400">
+              {isLoadingNearbyGyms
+                ? "Finding gyms near you..."
+                : `${gyms.length} gyms near you`}
+            </div>
           </div>
         </div>
 
-        {/* Clean Zoom & Locate Controls */}
+        {/* Map Controls: Locate Me, Light/Dark Street Toggle, Zoom */}
         <div className="pointer-events-auto flex items-center gap-1.5">
           <button
-            onClick={() => setZoom((z) => Math.min(1.4, z + 0.15))}
-            className="p-2.5 rounded-xl bg-obsidian-900/90 border border-white/10 text-slate-200"
-            title="Zoom in"
+            onClick={handleLocateMe}
+            className="px-3 py-2 rounded-2xl bg-obsidian-900/95 backdrop-blur-xl border border-cyber/50 text-cyber text-xs font-extrabold flex items-center gap-1.5 shadow-xl active:scale-95"
+            title="Find my exact GPS position & nearby gyms"
+          >
+            {isLocating || isLoadingNearbyGyms ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Compass className="w-3.5 h-3.5" />
+            )}
+            <span>Locate Me</span>
+          </button>
+
+          <button
+            onClick={handleToggleMapStyle}
+            className="p-2.5 rounded-2xl bg-obsidian-900/95 backdrop-blur-xl border border-white/15 text-slate-200 shadow-xl"
+            title="Switch Dark / Street Map"
+          >
+            <Sun className="w-4 h-4 text-volt" />
+          </button>
+
+          <button
+            onClick={() => mapRef.current?.zoomIn()}
+            className="p-2.5 rounded-2xl bg-obsidian-900/95 backdrop-blur-xl border border-white/15 text-slate-200 shadow-xl"
           >
             <Plus className="w-4 h-4" />
           </button>
           <button
-            onClick={() => setZoom((z) => Math.max(0.85, z - 0.15))}
-            className="p-2.5 rounded-xl bg-obsidian-900/90 border border-white/10 text-slate-200"
-            title="Zoom out"
+            onClick={() => mapRef.current?.zoomOut()}
+            className="p-2.5 rounded-2xl bg-obsidian-900/95 backdrop-blur-xl border border-white/15 text-slate-200 shadow-xl"
           >
             <Minus className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleRecenter}
-            className="p-2.5 rounded-xl bg-obsidian-900/90 border border-cyber/40 text-cyber"
-            title="Center on my position in Alicante"
-          >
-            <Compass className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Interactive Alicante Map Canvas */}
-      <div
-        style={{
-          transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
-          transition: isDragging
-            ? "none"
-            : "transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)",
-        }}
-        className="absolute inset-[-10%] w-[120%] h-[120%] origin-center"
-      >
-        <svg
-          viewBox="0 0 1000 1000"
-          preserveAspectRatio="xMidYMid slice"
-          className="w-full h-full"
-        >
-          <defs>
-            <linearGradient id="medSea" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#07192E" />
-              <stop offset="100%" stopColor="#040D1A" />
-            </linearGradient>
-            <pattern
-              id="alicanteGrid"
-              width="60"
-              height="60"
-              patternUnits="userSpaceOnUse"
-            >
-              <path
-                d="M 60 0 L 0 0 0 60"
-                fill="none"
-                stroke="#131C2B"
-                strokeWidth="1.2"
-              />
-            </pattern>
-          </defs>
-
-          {/* Alicante Land Base */}
-          <rect width="1000" height="1000" fill="#0B101B" />
-          <rect width="1000" height="1000" fill="url(#alicanteGrid)" />
-
-          {/* Monte Benacantil / Santa Bárbara Castle Hill */}
-          <circle cx="540" cy="540" r="65" fill="#10201E" opacity="0.65" />
-
-          {/* Mediterranean Sea (Southeast Coast of Alicante: Babel -> Puerto -> Postiguet -> Albufereta -> San Juan) */}
-          <path
-            d="M 0 850 Q 260 760 440 650 Q 560 580 720 460 Q 860 350 1000 220 L 1000 1000 L 0 1000 Z"
-            fill="url(#medSea)"
-          />
-          <path
-            d="M 0 850 Q 260 760 440 650 Q 560 580 720 460 Q 860 350 1000 220"
-            fill="none"
-            stroke="#00F0FF"
-            strokeWidth="2.5"
-            strokeOpacity="0.35"
-          />
-
-          {/* Main Alicante Roads (Av. Maisonnave, Av. de Denia, Gran Vía, A-70) */}
-          <g stroke="#1E2B40" strokeWidth="7" fill="none" strokeLinecap="round">
-            {/* Av. de Denia / N-332 */}
-            <path d="M 440 590 Q 620 430 920 150" />
-            {/* Av. Maisonnave -> Babel */}
-            <path d="M 120 720 Q 340 630 500 570" />
-            {/* Av. de la Universidad -> San Vicente */}
-            <path d="M 440 580 Q 340 360 220 120" />
-            {/* Gran Vía Ring */}
-            <path d="M 250 670 Q 350 420 670 380" />
-          </g>
-
-          {/* Clean Neighborhood Labels */}
-          <g
-            fill="#64748B"
-            fontFamily="system-ui, sans-serif"
-            fontWeight="700"
-            fontSize="13"
-            letterSpacing="1.5"
-          >
-            <text x="230" y="190">
-              NORTH DISTRICT
-            </text>
-            <text x="720" y="210">
-              EAST COAST
-            </text>
-            <text x="380" y="545" fill="#94A3B8">
-              {userCoords.label.split(",")[0].toUpperCase()} CENTER
-            </text>
-            <text x="530" y="455">
-              PLAZA DISTRICT
-            </text>
-            <text x="190" y="655">
-              WEST SIDE
-            </text>
-            <text x="640" y="690" fill="#00F0FF" opacity="0.4">
-              WATERFRONT
-            </text>
-          </g>
-        </svg>
-
-        {/* Pins Overlay */}
-        <div className="pointer-events-none absolute inset-[8%]">
-          {/* User's Current Position Marker in Alicante */}
+      {/* 3. Real Projected Markers: User GPS Dot + Real Local Gyms + Friend Bubbles */}
+      <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
+        {/* User's Real GPS Position Blue/Cyan Dot */}
+        {projectedUser && (
           <div
             style={{
-              left: "48%",
-              top: "61%",
+              left: `${projectedUser.x}px`,
+              top: `${projectedUser.y}px`,
               transform: "translate(-50%, -50%)",
             }}
-            className="absolute z-10 flex flex-col items-center"
+            className="absolute z-20 flex flex-col items-center"
           >
             <div className="relative flex items-center justify-center">
-              <span className="animate-ping absolute inline-flex h-8 w-8 rounded-full bg-cyber opacity-50" />
-              <div className="relative w-4 h-4 rounded-full bg-cyber border-2 border-white shadow-lg" />
+              <span className="animate-ping absolute inline-flex h-10 w-10 rounded-full bg-cyber opacity-50" />
+              <div className="relative w-4 h-4 rounded-full bg-cyber border-2 border-white shadow-[0_0_15px_#00F0FF]" />
             </div>
-            <span className="mt-1 px-2 py-0.5 rounded-full bg-obsidian-900/90 border border-cyber/40 text-[9px] font-bold text-cyber">
-              You ({userCoords.label.split(" ")[0]})
+            <span className="mt-1 px-2 py-0.5 rounded-full bg-obsidian-950/90 border border-cyber/50 text-[10px] font-black text-cyber shadow-md">
+              You
             </span>
           </div>
+        )}
 
-          {/* Gym & Friend Markers */}
-          {gyms.map((gym, idx) => {
-            const gymSessions = sessionsByGym.get(gym.id) || [];
-            const primarySession = gymSessions[0];
-            const coords = getGymCoords(gym, idx);
+        {/* Real Local Gyms & Active Friend Bubbles */}
+        {gyms.map((gym) => {
+          const pt = projectedGyms[gym.id];
+          if (!pt) return null;
 
-            const positionStyle: React.CSSProperties = {
-              left: `${coords.x}%`,
-              top: `${coords.y}%`,
-              transform: "translate(-50%, -100%)",
-            };
+          const gymSessions = sessionsByGym.get(gym.id) || [];
+          const primarySession = gymSessions[0];
 
-            if (primarySession) {
-              const isSelected = selectedSessionId === primarySession.id;
+          const posStyle: React.CSSProperties = {
+            left: `${pt.x}px`,
+            top: `${pt.y}px`,
+            transform: "translate(-50%, -100%)",
+          };
 
-              return (
-                <div
-                  key={gym.id}
-                  style={positionStyle}
-                  className="pointer-events-auto absolute z-20"
+          if (primarySession) {
+            const isSelected = selectedSessionId === primarySession.id;
+            return (
+              <div
+                key={gym.id}
+                style={posStyle}
+                className="pointer-events-auto absolute z-30"
+              >
+                <button
+                  onClick={() => {
+                    handleFocusGym(gym.longitude, gym.latitude);
+                    setSelectedSessionId(primarySession.id);
+                  }}
+                  className={`flex flex-col items-center group`}
                 >
-                  <button
-                    onClick={() => setSelectedSessionId(primarySession.id)}
-                    className={`flex items-center gap-2 p-2 pr-3 rounded-full transition-all shadow-xl border ${
+                  <div
+                    className={`flex items-center gap-2 p-1.5 pr-3 rounded-full border-2 shadow-2xl transition-transform ${
                       isSelected
-                        ? "bg-obsidian-800 border-volt scale-105"
-                        : "bg-obsidian-900/95 border-volt/70 hover:scale-105"
+                        ? "bg-obsidian-800 border-volt scale-110"
+                        : "bg-obsidian-900/95 border-volt hover:scale-105"
                     }`}
                   >
                     <UserAvatar
@@ -278,7 +275,7 @@ export function BroRadarMap() {
                       className="border border-volt"
                     />
                     <div className="text-left">
-                      <div className="text-[11px] font-extrabold text-white leading-tight flex items-center gap-1">
+                      <div className="text-[11px] font-black text-white leading-tight flex items-center gap-1">
                         <span>
                           {primarySession.creator.display_name.split(" ")[0]}
                         </span>
@@ -286,30 +283,81 @@ export function BroRadarMap() {
                           • {formatShortTime(primarySession.planned_time)}
                         </span>
                       </div>
-                      <div className="text-[9px] text-slate-400 truncate max-w-[110px]">
+                      <div className="text-[9px] font-semibold text-slate-300 truncate max-w-[115px]">
                         {gym.name}
                       </div>
                     </div>
-                  </button>
-                </div>
-              );
-            }
-
-            // Clean Idle Gym Pin
-            return (
-              <div
-                key={gym.id}
-                style={positionStyle}
-                className="pointer-events-auto absolute z-10"
-              >
-                <button
-                  onClick={() => openCreatePing(gym.id)}
-                  className="px-2.5 py-1.5 rounded-full bg-obsidian-900/90 border border-white/15 hover:border-volt text-[10px] font-bold text-slate-300 hover:text-white shadow-md flex items-center gap-1"
-                >
-                  <Navigation className="w-2.5 h-2.5 text-volt" />
-                  <span>{gym.name.replace("Alicante ", "")}</span>
+                  </div>
+                  <div className="w-2.5 h-2.5 rotate-45 -mt-1.5 bg-obsidian-900 border-r-2 border-b-2 border-volt" />
                 </button>
               </div>
+            );
+          }
+
+          // Real Local Gym Marker (Idle -> Tap to Plan Workout Here)
+          return (
+            <div
+              key={gym.id}
+              style={posStyle}
+              className="pointer-events-auto absolute z-10"
+            >
+              <button
+                onClick={() => {
+                  handleFocusGym(gym.longitude, gym.latitude);
+                  openCreatePing(gym.id);
+                }}
+                className="flex flex-col items-center group"
+              >
+                <div className="px-2.5 py-1.5 rounded-full bg-obsidian-900/95 border border-white/20 hover:border-volt shadow-xl flex items-center gap-1.5 transition-transform hover:scale-105">
+                  <div className="w-5 h-5 rounded-full bg-volt/20 text-volt flex items-center justify-center">
+                    <Dumbbell className="w-3 h-3" />
+                  </div>
+                  <span className="text-[11px] font-extrabold text-white whitespace-nowrap max-w-[130px] truncate">
+                    {gym.name}
+                  </span>
+                </div>
+                <div className="w-2 h-2 rounded-full bg-volt mt-0.5 shadow" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 4. Bottom Horizontal Gym Scroller on Map */}
+      <div className="pointer-events-none absolute bottom-4 left-0 right-0 z-20 px-4">
+        <div className="pointer-events-auto flex items-center gap-2.5 overflow-x-auto pb-1 no-scrollbar">
+          {gyms.map((gym) => {
+            const activeSession = (sessionsByGym.get(gym.id) || [])[0];
+            return (
+              <button
+                key={gym.id}
+                onClick={() => {
+                  handleFocusGym(gym.longitude, gym.latitude);
+                  if (activeSession) {
+                    setSelectedSessionId(activeSession.id);
+                  } else {
+                    openCreatePing(gym.id);
+                  }
+                }}
+                className="flex-shrink-0 p-3 rounded-2xl bg-obsidian-900/95 backdrop-blur-xl border border-white/15 hover:border-volt text-left shadow-xl flex items-center gap-2.5 min-w-[200px]"
+              >
+                <div className="w-9 h-9 rounded-xl bg-volt/15 text-volt flex items-center justify-center flex-shrink-0">
+                  <Navigation className="w-4 h-4" />
+                </div>
+                <div className="overflow-hidden">
+                  <div className="text-xs font-extrabold text-white truncate max-w-[140px]">
+                    {gym.name}
+                  </div>
+                  <div className="text-[10px] text-slate-400 truncate max-w-[140px] flex items-center gap-1">
+                    <MapPin className="w-2.5 h-2.5 text-volt flex-shrink-0" />
+                    {activeSession
+                      ? `${activeSession.creator.display_name.split(" ")[0]} • ${formatShortTime(
+                          activeSession.planned_time
+                        )}`
+                      : gym.address}
+                  </div>
+                </div>
+              </button>
             );
           })}
         </div>

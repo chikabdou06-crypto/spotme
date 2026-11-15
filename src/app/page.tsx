@@ -45,8 +45,8 @@ export default function SpotMeHomePage() {
             {activeTab === "profile" && <ProfileView />}
           </div>
 
-          {/* Clean Bottom Navigation Bar */}
-          <nav className="relative z-30 h-20 px-6 pb-3 bg-obsidian-900/95 backdrop-blur-xl border-t border-white/10 flex items-center justify-around">
+          {/* Clean Bottom Navigation Bar (iPhone 14 Pro Max Safe Area) */}
+          <nav className="relative z-30 px-6 pt-2 pb-[max(env(safe-area-inset-bottom,22px),22px)] bg-obsidian-900/95 backdrop-blur-xl border-t border-white/10 flex items-center justify-around">
             <button
               onClick={() => setActiveTab("home")}
               className={`flex flex-col items-center gap-1 text-xs font-bold transition-colors ${

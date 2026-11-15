@@ -81,7 +81,7 @@ export function ProfileView() {
   };
 
   return (
-    <div className="w-full h-full overflow-y-auto bg-obsidian-950 px-4 pt-5 pb-28 space-y-5">
+    <div className="w-full h-full overflow-y-auto bg-obsidian-950 px-5 pt-[max(env(safe-area-inset-top,56px),56px)] pb-32 space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-black text-white">Your Profile</h1>

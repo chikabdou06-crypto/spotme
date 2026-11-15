@@ -48,9 +48,9 @@ export function CreatePingModal() {
     if (isCreatePingOpen) {
       setSelectedGymId(
         preselectedGymIdForPing ||
-          currentUser.home_gym_id ||
-          gyms[0]?.id ||
-          ""
+        currentUser.home_gym_id ||
+        gyms[0]?.id ||
+        ""
       );
       setWorkoutType(currentUser.favorite_split || WORKOUT_SPLITS[0]);
       setNote("");
@@ -128,11 +128,10 @@ export function CreatePingModal() {
                     key={gym.id}
                     type="button"
                     onClick={() => setSelectedGymId(gym.id)}
-                    className={`p-2.5 rounded-xl border text-left flex items-center justify-between ${
-                      isSelected
+                    className={`p-2.5 rounded-xl border text-left flex items-center justify-between ${isSelected
                         ? "bg-volt/15 border-volt text-white"
                         : "bg-obsidian-800 border-white/10 text-slate-300"
-                    }`}
+                      }`}
                   >
                     <div>
                       <div className="text-xs font-extrabold">{gym.name}</div>
@@ -163,11 +162,10 @@ export function CreatePingModal() {
                       setUseCustomTime(false);
                       setSelectedTimePreset(preset.value);
                     }}
-                    className={`py-2 rounded-xl border text-xs font-bold ${
-                      isSelected
+                    className={`py-2 rounded-xl border text-xs font-bold ${isSelected
                         ? "bg-cyber text-obsidian-950 border-cyber font-black"
                         : "bg-obsidian-800 border-white/10 text-slate-300"
-                    }`}
+                      }`}
                   >
                     {preset.label}
                   </button>
@@ -202,11 +200,10 @@ export function CreatePingModal() {
                     key={split}
                     type="button"
                     onClick={() => setWorkoutType(split)}
-                    className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border ${
-                      active
+                    className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border ${active
                         ? "bg-volt text-obsidian-950 border-volt font-black"
                         : "bg-obsidian-800 border-white/10 text-slate-300"
-                    }`}
+                      }`}
                   >
                     {split}
                   </button>
