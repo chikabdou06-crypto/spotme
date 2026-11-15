@@ -36,7 +36,7 @@ export function PhoneSimulatorShell({
   } = useSpotMe();
   const { user, setShowOnboardingModal } = useAuth();
 
-  const lanUrl = "exp://192.168.1.229:8081";
+  const lanUrl = "exp://w7sdwlk-anonymous-8081.exp.direct";
 
   const handleCopyLanUrl = () => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -223,7 +223,7 @@ export function PhoneSimulatorShell({
             <div className="flex items-center gap-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=exp://192.168.1.229:8081&bgcolor=0B0F17&color=CCFF00"
+                src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=exp://w7sdwlk-anonymous-8081.exp.direct&bgcolor=0B0F17&color=CCFF00"
                 alt="Expo Go QR Code"
                 className="w-20 h-20 rounded-xl border border-volt/40 p-1 bg-obsidian-950 flex-shrink-0"
               />

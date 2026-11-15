@@ -40,16 +40,25 @@ export function TopNavBar() {
           </div>
         </div>
 
-        {/* Right Actions: Simulate Ping, Crew, Profile */}
+        {/* Right Actions: Open in Expo Go, Simulate Ping, Crew, Profile */}
         <div className="pointer-events-auto flex items-center gap-1.5">
+          {/* 1-Tap Launch Native Expo Go App on iPhone */}
+          <a
+            href="exp://w7sdwlk-anonymous-8081.exp.direct"
+            className="px-2.5 py-2 rounded-2xl bg-volt text-obsidian-950 text-[11px] font-black flex items-center gap-1 shadow-[0_0_16px_rgba(204,255,0,0.5)] transition-all active:scale-95"
+            title="Launch native SpotMe app inside Expo Go on iPhone"
+          >
+            <span>📲 Expo Go</span>
+          </a>
+
           {/* Simulate Live Friend Ping / Counter Button */}
           <button
             onClick={simulateRealtimeEvent}
-            className="px-2.5 py-2 rounded-2xl bg-obsidian-900/90 hover:bg-obsidian-800 backdrop-blur-xl border border-cyber/40 text-cyber text-[11px] font-extrabold flex items-center gap-1 shadow-xl transition-all active:scale-95"
+            className="px-2 py-2 rounded-2xl bg-obsidian-900/90 hover:bg-obsidian-800 backdrop-blur-xl border border-cyber/40 text-cyber text-[11px] font-extrabold flex items-center gap-1 shadow-xl transition-all active:scale-95"
             title="Trigger a simulated real-time friend ping or counter-proposal"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Sim Ping</span>
+            <span className="hidden sm:inline">Sim</span>
           </button>
 
           {/* Add Friends / Crew Button */}
