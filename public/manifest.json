@@ -2,7 +2,8 @@
   "name": "SpotMe — Strava for Gym Bros",
   "short_name": "SpotMe",
   "description": "Frictionless, visual social Bro Radar for gym-goers with zero paywalls.",
-  "start_url": "/",
+  "start_url": "/spotme/",
+  "scope": "/spotme/",
   "display": "standalone",
   "background_color": "#07090E",
   "theme_color": "#CCFF00"

@@ -1,5 +1,10 @@
 # ⚡ SpotMe — "Strava for Gym Bros"
 
+## 📱 👉 [TAP HERE TO OPEN THE LIVE SPOTME APP](https://chikabdou06-crypto.github.io/spotme/) 👈
+*(Open `https://chikabdou06-crypto.github.io/spotme/` in **Safari** on your iPhone, then tap **Share → Add to Home Screen** to install the full-screen app!)*
+
+---
+
 **SpotMe** is a frictionless, highly visual social web app (PWA) for gym-goers with **zero paywalls**. Drop a pin on your gym, broadcast your planned workout time on the **Bro Radar**, and let your crew lock in a spot or counter-propose a new time or gym in real time.
 
 ---

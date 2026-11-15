@@ -7,7 +7,10 @@ export const metadata: Metadata = {
   title: "SpotMe | The Social Bro Radar for Gym-Goers",
   description:
     "Frictionless, visual social workout radar. Drop a gym ping, spot your crew, or counter-propose times and gyms in real time.",
-  manifest: "/manifest.json",
+  manifest:
+    process.env.GITHUB_PAGES === "true"
+      ? "/spotme/manifest.json"
+      : "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
