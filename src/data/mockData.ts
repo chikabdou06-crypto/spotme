@@ -33,53 +33,52 @@ export const FITNESS_GOALS = [
   "Meet Gym Partners",
 ];
 
-// Real gyms in Alicante, Spain
 export const INITIAL_GYMS: Gym[] = [
   {
     id: "gym-synergym-centro",
-    name: "Synergym Alicante Centro",
-    address: "Av. Maisonnave, 30, Alicante",
-    vibe_tag: "Centro • Free Weights",
+    name: "Synergym Centro",
+    address: "City Center • Main Avenue",
+    vibe_tag: "Free Weights & Racks",
     latitude: 38.3446,
     longitude: -0.4908,
   },
   {
     id: "gym-vivagym-plazamar",
-    name: "VivaGym Plaza Mar 2",
-    address: "Av. de Denia, s/n, Alicante",
-    vibe_tag: "Plaza Mar • Spacious",
+    name: "VivaGym Plaza",
+    address: "Plaza Shopping Center",
+    vibe_tag: "Spacious & Functional",
     latitude: 38.3539,
     longitude: -0.4712,
   },
   {
     id: "gym-mcfit-alicante",
-    name: "McFIT Alicante",
-    address: "Av. de Denia, 78, Alicante",
-    vibe_tag: "24h • Heavy Racks",
+    name: "McFIT 24h",
+    address: "North Avenue, 78",
+    vibe_tag: "24h • Heavy Iron",
     latitude: 38.3585,
     longitude: -0.4638,
   },
   {
     id: "gym-basicfit-babel",
-    name: "Basic-Fit Alicante Babel",
-    address: "C. Pardo Gimeno, 43, Alicante",
-    vibe_tag: "Babel • Modern Turf",
+    name: "Basic-Fit Club",
+    address: "West District, 43",
+    vibe_tag: "Modern Turf & Machines",
     latitude: 38.3389,
     longitude: -0.5042,
   },
   {
     id: "gym-arena-alicante",
-    name: "Arena Alicante",
-    address: "Playa de San Juan, Alicante",
-    vibe_tag: "San Juan • Pool & Gym",
+    name: "Arena Fitness & Wellness",
+    address: "Beach Boulevard",
+    vibe_tag: "Pool, Gym & Recovery",
     latitude: 38.3748,
     longitude: -0.4254,
   },
   {
     id: "gym-dreamfit-sanvicente",
-    name: "Dreamfit San Vicente",
-    address: "San Vicente del Raspeig, Alicante",
-    vibe_tag: "University Area • Sauna",
+    name: "Dreamfit Campus",
+    address: "University District",
+    vibe_tag: "Strength & Sauna",
     latitude: 38.3895,
     longitude: -0.5172,
   },
@@ -87,7 +86,7 @@ export const INITIAL_GYMS: Gym[] = [
 
 export const DEFAULT_CURRENT_USER: UserProfile = {
   id: "user-me",
-  username: "alex_alicante",
+  username: "alex_fit",
   display_name: "Alex",
   avatar_url:
     "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=240&auto=format&fit=crop&q=80",
@@ -97,7 +96,6 @@ export const DEFAULT_CURRENT_USER: UserProfile = {
   created_at: new Date().toISOString(),
 };
 
-// Small, diverse, realistic friend list in Alicante
 export const INITIAL_USERS: UserProfile[] = [
   DEFAULT_CURRENT_USER,
   {
@@ -113,7 +111,7 @@ export const INITIAL_USERS: UserProfile[] = [
   },
   {
     id: "user-mateo",
-    username: "mateo_alc",
+    username: "mateo_lifts",
     display_name: "Mateo Ruiz",
     avatar_url:
       "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=240&auto=format&fit=crop&q=80",
@@ -124,7 +122,7 @@ export const INITIAL_USERS: UserProfile[] = [
   },
   {
     id: "user-sofia",
-    username: "sofia_sanjuan",
+    username: "sofia_costa",
     display_name: "Sofía Costa",
     avatar_url:
       "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=240&auto=format&fit=crop&q=80",
@@ -200,7 +198,7 @@ export const INITIAL_SESSIONS: GymSession[] = [
     gym_id: "gym-vivagym-plazamar",
     planned_time: todayAt(19, 0),
     workout_type: "Legs & Glutes",
-    note: "Evening leg session at Plaza Mar 2!",
+    note: "Evening leg session!",
     status: "active",
     created_at: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
   },

@@ -38,16 +38,14 @@ export function HomeDashboardView({
 
   const [sharedFeedback, setSharedFeedback] = useState(false);
 
-  const homeGym =
-    gyms.find((g) => g.id === user.home_gym_id) || gyms[0];
-
+  const homeGym = gyms.find((g) => g.id === user.home_gym_id) || gyms[0];
   const friendsList = users.filter((u) => u.id !== user.id);
 
   const handleShareWithFriend = async () => {
     const shareUrl = "https://chikabdou06-crypto.github.io/spotme/";
     const shareData = {
-      title: "SpotMe Alicante",
-      text: `Hey! Join me on SpotMe so we can coordinate gym sessions in Alicante:`,
+      title: "SpotMe",
+      text: `Join me on SpotMe (@${user.username}) so we can connect for gym workouts:`,
       url: shareUrl,
     };
 
@@ -68,7 +66,7 @@ export function HomeDashboardView({
 
   return (
     <div className="w-full h-full overflow-y-auto bg-obsidian-950 px-4 pt-5 pb-28 space-y-6">
-      {/* 1. Clean Top Greeting & Your Position in Alicante */}
+      {/* 1. Clean Top Greeting & Your Location */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button onClick={onOpenProfileTab} className="relative">
@@ -80,62 +78,62 @@ export function HomeDashboardView({
             />
           </button>
           <div>
-            <div className="flex items-center gap-1.5 text-[11px] font-bold text-volt">
+            <div className="flex items-center gap-1 text-[11px] font-bold text-volt">
               <MapPin className="w-3 h-3" />
               <span>{userCoords.label}</span>
             </div>
             <h1 className="text-lg font-black text-white leading-tight">
-              Hola, {user.display_name}
+              Hey, {user.display_name}
             </h1>
             <p className="text-xs text-slate-400">
-              Home gym: <strong className="text-slate-200">{homeGym?.name}</strong>
+              Gym: <strong className="text-slate-200">{homeGym?.name}</strong>
             </p>
           </div>
         </div>
 
-        {/* Share App with a Friend Button */}
+        {/* Share App with Friends Button */}
         <button
           onClick={handleShareWithFriend}
-          className="px-3 py-2 rounded-2xl bg-obsidian-900 hover:bg-obsidian-800 border border-white/10 text-xs font-bold text-white flex items-center gap-1.5"
+          className="px-3.5 py-2.5 rounded-2xl bg-volt text-obsidian-950 text-xs font-black flex items-center gap-1.5 shadow-lg"
         >
           {sharedFeedback ? (
             <>
-              <Check className="w-3.5 h-3.5 text-volt" />
-              <span className="text-volt">Link Copied</span>
+              <Check className="w-3.5 h-3.5" />
+              <span>Copied!</span>
             </>
           ) : (
             <>
-              <Share2 className="w-3.5 h-3.5 text-volt" />
-              <span>Share</span>
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Share App</span>
             </>
           )}
         </button>
       </div>
 
       {/* 2. Primary Action Card: Plan a Workout */}
-      <div className="p-4 rounded-3xl bg-gradient-to-br from-obsidian-800 via-obsidian-900 to-obsidian-900 border border-white/10 shadow-xl flex items-center justify-between gap-3">
+      <div className="p-4 rounded-3xl bg-obsidian-900 border border-white/10 shadow-xl flex items-center justify-between gap-3">
         <div className="space-y-1">
           <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-volt uppercase tracking-wider">
-            <Dumbbell className="w-3.5 h-3.5" /> Going to the gym today?
+            <Dumbbell className="w-3.5 h-3.5" /> Working out today?
           </span>
           <h2 className="text-base font-black text-white">
-            Let your friends know when & where
+            Let your gym bros know when & where
           </h2>
           <p className="text-xs text-slate-400">
-            Drop a quick ping at {homeGym?.name} or any gym in Alicante.
+            Post your workout time so friends can join you.
           </p>
         </div>
 
         <button
           onClick={() => openCreatePing(homeGym?.id)}
-          className="flex-shrink-0 px-4 py-3.5 rounded-2xl bg-volt hover:bg-volt-400 text-obsidian-950 font-black text-xs uppercase tracking-wide flex items-center gap-1.5 shadow-[0_0_20px_rgba(204,255,0,0.3)]"
+          className="flex-shrink-0 px-4 py-3.5 rounded-2xl bg-volt hover:bg-volt-400 text-obsidian-950 font-black text-xs uppercase tracking-wide flex items-center gap-1.5"
         >
           <Plus className="w-4 h-4 stroke-[3]" />
-          Ping Gym
+          Ping
         </button>
       </div>
 
-      {/* 3. Friends Training Today in Alicante */}
+      {/* 3. Friends Training Today */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
@@ -146,15 +144,13 @@ export function HomeDashboardView({
             className="text-xs font-bold text-volt hover:underline flex items-center gap-1"
           >
             <MapPin className="w-3.5 h-3.5" />
-            Open Alicante Map →
+            View Map →
           </button>
         </div>
 
         <div className="space-y-3">
           {enrichedSessions.map((session) => {
-            const isAccepted = session.spotters.some(
-              (s) => s.id === user.id
-            );
+            const isAccepted = session.spotters.some((s) => s.id === user.id);
 
             return (
               <div
@@ -196,7 +192,6 @@ export function HomeDashboardView({
                   </p>
                 )}
 
-                {/* Clean 2-Button Action Row */}
                 <div className="flex items-center gap-2 pt-1">
                   <button
                     onClick={() =>
@@ -231,18 +226,18 @@ export function HomeDashboardView({
         </div>
       </div>
 
-      {/* 4. Your Friends List in Alicante */}
+      {/* 4. Your Friends List */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
-            Your Alicante Friends ({friendsList.length})
+            Your Gym Friends ({friendsList.length})
           </h3>
           <button
             onClick={() => setIsFriendsDrawerOpen(true)}
             className="text-xs font-bold text-cyber flex items-center gap-1"
           >
             <UserPlus className="w-3.5 h-3.5" />
-            Add Friend
+            Invite / Add Friend
           </button>
         </div>
 
@@ -265,7 +260,7 @@ export function HomeDashboardView({
                       {friend.display_name}
                     </div>
                     <div className="text-[11px] text-slate-400">
-                      {friendGym?.name || "Alicante"} • {friend.favorite_split}
+                      {friendGym?.name || "Local Gym"} • {friend.favorite_split}
                     </div>
                   </div>
                 </div>

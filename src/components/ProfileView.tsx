@@ -86,7 +86,7 @@ export function ProfileView() {
         <div>
           <h1 className="text-lg font-black text-white">Your Profile</h1>
           <p className="text-xs text-slate-400">
-            Update your photo, Alicante home gym & workout split
+            Update your photo, home gym & workout split
           </p>
         </div>
 
@@ -95,7 +95,7 @@ export function ProfileView() {
           onClick={resetOnboarding}
           className="px-3 py-1.5 rounded-xl bg-obsidian-900 border border-white/10 text-xs font-bold text-slate-300 flex items-center gap-1"
         >
-          <RotateCcw className="w-3.5 h-3.5" /> Welcome Intro
+          <RotateCcw className="w-3.5 h-3.5" /> Replay Intro
         </button>
       </div>
 
@@ -177,10 +177,10 @@ export function ProfileView() {
           </div>
         </div>
 
-        {/* Home Gym in Alicante */}
+        {/* Home Gym */}
         <div>
           <label className="text-xs font-bold text-slate-300 flex items-center gap-1 mb-1.5">
-            <MapPin className="w-3.5 h-3.5 text-volt" /> Home Gym in Alicante
+            <MapPin className="w-3.5 h-3.5 text-volt" /> Home Gym
           </label>
           <select
             value={homeGymId}

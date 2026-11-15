@@ -102,7 +102,7 @@ export function CreatePingModal() {
               Plan a Gym Session
             </h2>
             <p className="text-xs text-slate-400">
-              Let your Alicante friends know when & where
+              Let your friends know when & where you are training
             </p>
           </div>
 
@@ -115,10 +115,10 @@ export function CreatePingModal() {
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 overflow-y-auto space-y-4">
-          {/* 1. Gym in Alicante */}
+          {/* 1. Gym */}
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-300 flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5 text-volt" /> Gym in Alicante
+              <MapPin className="w-3.5 h-3.5 text-volt" /> Select Gym
             </label>
             <div className="grid grid-cols-1 gap-1.5 max-h-36 overflow-y-auto">
               {gyms.map((gym) => {

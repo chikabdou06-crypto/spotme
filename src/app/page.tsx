@@ -73,7 +73,7 @@ export default function SpotMeHomePage() {
               }`}
             >
               <MapPin className="w-5 h-5" />
-              <span className="text-[11px]">Alicante Map</span>
+              <span className="text-[11px]">Map</span>
             </button>
 
             <button

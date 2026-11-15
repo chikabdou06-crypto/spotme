@@ -64,7 +64,7 @@ export function FriendsDrawer() {
   const friendsList = users.filter((u) => u.id !== currentUser.id);
 
   const getGymName = (gymId: string | null) =>
-    gyms.find((g) => g.id === gymId)?.name || "Alicante";
+    gyms.find((g) => g.id === gymId)?.name || "Local Gym";
 
   return (
     <div className="absolute inset-0 z-50 flex items-end justify-center">
@@ -81,7 +81,7 @@ export function FriendsDrawer() {
             </div>
             <div>
               <h2 className="text-base font-black text-white">
-                Friends in Alicante
+                Your Gym Friends
               </h2>
               <p className="text-xs text-slate-400">
                 Invite friends or search by username

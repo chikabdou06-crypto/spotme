@@ -93,7 +93,7 @@ export function BroRadarMap() {
       <div className="absolute top-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
         <div className="pointer-events-auto px-3.5 py-2 rounded-2xl bg-obsidian-900/90 backdrop-blur-md border border-white/10 shadow-xl">
           <div className="text-xs font-black text-white">
-            📍 Alicante Gym Map
+            📍 {userCoords.label}
           </div>
           <div className="text-[10px] text-slate-400">
             Tap a friend to join or tap a gym to plan
@@ -193,7 +193,7 @@ export function BroRadarMap() {
             <path d="M 250 670 Q 350 420 670 380" />
           </g>
 
-          {/* Clean Neighborhood Labels in Alicante */}
+          {/* Clean Neighborhood Labels */}
           <g
             fill="#64748B"
             fontFamily="system-ui, sans-serif"
@@ -202,22 +202,22 @@ export function BroRadarMap() {
             letterSpacing="1.5"
           >
             <text x="230" y="190">
-              SAN VICENTE DEL RASPEIG
+              NORTH DISTRICT
             </text>
             <text x="720" y="210">
-              PLAYA DE SAN JUAN
+              EAST COAST
             </text>
             <text x="380" y="545" fill="#94A3B8">
-              ALICANTE CENTRO
+              {userCoords.label.split(",")[0].toUpperCase()} CENTER
             </text>
             <text x="530" y="455">
-              PLAZA MAR 2
+              PLAZA DISTRICT
             </text>
             <text x="190" y="655">
-              BABEL
+              WEST SIDE
             </text>
             <text x="640" y="690" fill="#00F0FF" opacity="0.4">
-              PUERTO DE ALICANTE
+              WATERFRONT
             </text>
           </g>
         </svg>
